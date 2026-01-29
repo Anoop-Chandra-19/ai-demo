@@ -5,12 +5,32 @@ Connects to localhost:8000 and provides interactive chat with streaming response
 """
 
 import argparse
+import sys
 from openai import OpenAI
 
 DEFAULT_MODEL = "mistralai/Mistral-7B-Instruct-v0.3"
 
+USER_COLOR = "\033[32m"
+ASSISTANT_COLOR = "\033[36m"
+ERROR_COLOR = "\033[31m"
+BOLD = "\033[1m"
+RESET_BOLD = "\033[22m"
+RESET = "\033[0m"
 
-def chat(port: int, model_name: str | None) -> None:
+
+def format_prefix(label: str, color: str, use_color: bool) -> str:
+    if not use_color:
+        return label
+    return f"{BOLD}{color}{label}{RESET_BOLD}"
+
+
+def colorize(text: str, color: str, use_color: bool) -> str:
+    if not use_color:
+        return text
+    return f"{color}{text}{RESET}"
+
+
+def chat(port: int, model_name: str | None, use_color: bool) -> None:
     """Interactive chat loop with streaming responses and history."""
 
     # Configure OpenAI client to point to vLLM server
@@ -41,7 +61,10 @@ def chat(port: int, model_name: str | None) -> None:
     while True:
         # Get user input
         try:
-            user_input = input("You: ").strip()
+            prompt = format_prefix("You: ", USER_COLOR, use_color)
+            user_input = input(prompt).strip()
+            if use_color:
+                print(RESET, end="", flush=True)
         except (EOFError, KeyboardInterrupt):
             print("\n\nGoodbye!")
             break
@@ -59,7 +82,8 @@ def chat(port: int, model_name: str | None) -> None:
         messages.append({"role": "user", "content": user_input})
 
         # Get streaming response from vLLM
-        print("Assistant: ", end="", flush=True)
+        assistant_prefix = format_prefix("Assistant: ", ASSISTANT_COLOR, use_color)
+        print(assistant_prefix, end="", flush=True)
 
         try:
             stream = client.chat.completions.create(
@@ -78,6 +102,8 @@ def chat(port: int, model_name: str | None) -> None:
                     print(content, end="", flush=True)
                     full_response += content
 
+            if use_color:
+                print(RESET, end="", flush=True)
             print()  # Newline after response
             print()  # Extra spacing
 
@@ -85,7 +111,8 @@ def chat(port: int, model_name: str | None) -> None:
             messages.append({"role": "assistant", "content": full_response})
 
         except Exception as e:
-            print(f"\n\nError: {e}")
+            error_text = colorize(f"\n\nError: {e}", ERROR_COLOR, use_color)
+            print(error_text)
             print("\nMake sure the vLLM server is running: python server.py")
             print()
             # Remove the user message since we didn't get a response
@@ -106,6 +133,12 @@ if __name__ == "__main__":
         default=None,
         help="Model to use (default: auto-detect from server)",
     )
+    parser.add_argument(
+        "--no-color",
+        action="store_true",
+        help="Disable ANSI colors in output",
+    )
     args = parser.parse_args()
 
-    chat(args.port, args.model)
+    use_color = sys.stdout.isatty() and not args.no_color
+    chat(args.port, args.model, use_color)
