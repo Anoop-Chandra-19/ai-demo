@@ -30,7 +30,45 @@ def colorize(text: str, color: str, use_color: bool) -> str:
     return f"{color}{text}{RESET}"
 
 
-def chat(port: int, model_name: str | None, use_color: bool) -> None:
+def init_tokenizer(model_name: str):
+    try:
+        from transformers import AutoTokenizer
+    except Exception:
+        return None, "Transformers is not installed"
+    try:
+        return AutoTokenizer.from_pretrained(model_name, use_fast=True), None
+    except Exception as exc:
+        return None, str(exc)
+
+
+def update_status_line(text: str, enabled: bool) -> None:
+    if not enabled:
+        return
+    sys.stdout.write("\0337")
+    sys.stdout.write("\033[1E")
+    sys.stdout.write("\r\033[K" + text)
+    sys.stdout.write("\0338")
+    sys.stdout.flush()
+
+
+def finish_status_line(enabled: bool) -> None:
+    if not enabled:
+        print()
+        print()
+        return
+    sys.stdout.write("\033[1E")
+    sys.stdout.write("\r")
+    sys.stdout.flush()
+    print()
+    print()
+
+
+def chat(
+    port: int,
+    model_name: str | None,
+    use_color: bool,
+    enable_token_count: bool,
+) -> None:
     """Interactive chat loop with streaming responses and history."""
 
     # Configure OpenAI client to point to vLLM server
@@ -48,6 +86,17 @@ def chat(port: int, model_name: str | None, use_color: bool) -> None:
                 model_name = DEFAULT_MODEL
         except Exception:
             model_name = DEFAULT_MODEL
+
+    tokenizer = None
+    token_count_enabled = enable_token_count and sys.stdout.isatty()
+    if token_count_enabled:
+        tokenizer, tokenizer_error = init_tokenizer(model_name)
+        if tokenizer is None:
+            token_count_enabled = False
+            print(
+                f"Token counting disabled: {tokenizer_error}."
+                " Install transformers to enable it."
+            )
 
     # Chat history (list of message dicts with 'role' and 'content')
     messages = []
@@ -96,16 +145,20 @@ def chat(port: int, model_name: str | None, use_color: bool) -> None:
 
             # Collect full response while streaming
             full_response = ""
+            token_count = 0
             for chunk in stream:
                 if chunk.choices[0].delta.content is not None:
                     content = chunk.choices[0].delta.content
-                    print(content, end="", flush=True)
+                    if use_color:
+                        print(f"{ASSISTANT_COLOR}{content}{RESET}", end="", flush=True)
+                    else:
+                        print(content, end="", flush=True)
                     full_response += content
+                    if token_count_enabled and tokenizer is not None:
+                        token_count = len(tokenizer.encode(full_response))
+                        update_status_line(f"Tokens: {token_count}", True)
 
-            if use_color:
-                print(RESET, end="", flush=True)
-            print()  # Newline after response
-            print()  # Extra spacing
+            finish_status_line(token_count_enabled)
 
             # Add assistant response to history
             messages.append({"role": "assistant", "content": full_response})
@@ -138,7 +191,13 @@ if __name__ == "__main__":
         action="store_true",
         help="Disable ANSI colors in output",
     )
+    parser.add_argument(
+        "--token-count",
+        action="store_true",
+        help="Enable live token counting in output",
+    )
     args = parser.parse_args()
 
     use_color = sys.stdout.isatty() and not args.no_color
-    chat(args.port, args.model, use_color)
+    enable_token_count = args.token_count
+    chat(args.port, args.model, use_color, enable_token_count)
