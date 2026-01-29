@@ -14,7 +14,7 @@ HOST = "0.0.0.0"
 PORT = 8000
 
 
-def start_server(model_key: str, port: int) -> None:
+def start_server(model_key: str, port: int, disable_eager: bool) -> None:
     """Start vLLM server with the specified model."""
     # Get model configuration
     try:
@@ -47,6 +47,7 @@ def start_server(model_key: str, port: int) -> None:
     print(f"Context Length: {context_length} tokens")
     print(f"GPU Memory Utilization: {gpu_memory * 100}%")
     print(f"Data Type: {dtype}")
+    print(f"Eager Mode: {'disabled' if disable_eager else 'enabled'}")
     print(f"API endpoint: http://localhost:{port}")
     print(f"OpenAI-compatible endpoint: http://localhost:{port}/v1")
     print()
@@ -70,10 +71,11 @@ def start_server(model_key: str, port: int) -> None:
         str(context_length),
         "--gpu-memory-utilization",
         str(gpu_memory),
-        "--enforce-eager",  # Disable CUDA graphs for compatibility
         "--dtype",
         dtype,
     ]
+    if not disable_eager:
+        cmd.append("--enforce-eager")
 
     try:
         subprocess.run(cmd)
@@ -104,6 +106,11 @@ def main() -> None:
         action="store_true",
         help="List available models and exit",
     )
+    parser.add_argument(
+        "--disable-eager",
+        action="store_true",
+        help="Disable eager mode (allow CUDA graphs)",
+    )
 
     args = parser.parse_args()
 
@@ -120,7 +127,7 @@ def main() -> None:
 
     # Update PORT if specified
     # Start server
-    start_server(args.model_name, args.port)
+    start_server(args.model_name, args.port, args.disable_eager)
 
 
 if __name__ == "__main__":
