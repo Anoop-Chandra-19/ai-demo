@@ -9,4 +9,5 @@ dependencies = [
     "openai>=1.0.0",
     "huggingface-hub>=0.20.0",
     "python-dotenv>=1.2.1",
+    "textual>=7.4.0",
 ]

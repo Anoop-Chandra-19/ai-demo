@@ -53,6 +53,10 @@ In another terminal, start the interactive chat client:
 
 ```bash
 python client.py
+# or explicitly set the model:
+python client.py --model google/gemma-3-4b-it
+# or connect to a custom port:
+python client.py --port 8080
 ```
 
 Now you can chat with the model! Type your messages and press Enter. The model will respond with streaming output.

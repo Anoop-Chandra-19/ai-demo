@@ -4,26 +4,36 @@ CLI chat client for vLLM server
 Connects to localhost:8000 and provides interactive chat with streaming responses.
 """
 
+import argparse
 from openai import OpenAI
-import sys
 
-# Configure OpenAI client to point to vLLM server
-client = OpenAI(
-    base_url="http://localhost:8000/v1",
-    api_key="dummy-key",  # vLLM doesn't require auth by default
-)
-
-MODEL_NAME = "mistralai/Mistral-7B-Instruct-v0.3"
+DEFAULT_MODEL = "mistralai/Mistral-7B-Instruct-v0.3"
 
 
-def chat():
+def chat(port: int, model_name: str | None) -> None:
     """Interactive chat loop with streaming responses and history."""
+
+    # Configure OpenAI client to point to vLLM server
+    client = OpenAI(
+        base_url=f"http://localhost:{port}/v1",
+        api_key="dummy-key",  # vLLM doesn't require auth by default
+    )
+
+    if model_name is None:
+        try:
+            models = client.models.list()
+            if models.data:
+                model_name = models.data[0].id
+            else:
+                model_name = DEFAULT_MODEL
+        except Exception:
+            model_name = DEFAULT_MODEL
 
     # Chat history (list of message dicts with 'role' and 'content')
     messages = []
 
     print("=" * 70)
-    print("vLLM Chat Demo - Mistral-7B-Instruct-v0.3")
+    print(f"vLLM Chat Demo - {model_name}")
     print("=" * 70)
     print("Type your message and press Enter. Type 'quit' or 'exit' to end.")
     print()
@@ -53,7 +63,7 @@ def chat():
 
         try:
             stream = client.chat.completions.create(
-                model=MODEL_NAME,
+                model=model_name,
                 messages=messages,
                 stream=True,
                 max_tokens=512,
@@ -83,4 +93,19 @@ def chat():
 
 
 if __name__ == "__main__":
-    chat()
+    parser = argparse.ArgumentParser(description="vLLM CLI chat client")
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port of the vLLM server (default: 8000)",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="Model to use (default: auto-detect from server)",
+    )
+    args = parser.parse_args()
+
+    chat(args.port, args.model)
